@@ -9,7 +9,8 @@ class GW(object):
 
     def __init__(self, root, pgf):
         self.root = root
-        self.current_parents = [root]
+        self.current_parents = [self.root]
+        self.history = [self.root]
 
         self.pgf = pgf
 
@@ -27,10 +28,10 @@ class GW(object):
                 lattice_children[parent] = children_function(parent)
 
             children = lattice_children[parent]
-            children = [child for child in children if child != parent]
+            children = [child for child in children if child != parent and child not in self.history]
 
             child_parameters = [lattice_parameters[(parent, child)] for child in children]
-            p_children += len(children)*np.mean(child_parameters)
+            p_children += 0 if not child_parameters else len(children)*np.mean(child_parameters)
 
             all_children.extend(children)
 
@@ -50,6 +51,7 @@ class GW(object):
                                                   'mean': p_children*sigma,
                                                   'p_stop': p_stop}
 
+        self.history.extend(all_children)
         self.current_parents = all_children
 
 
