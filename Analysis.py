@@ -1,8 +1,17 @@
 import numpy as np
 
 
-def binomial_pgf(x, p, s):
-    return np.power(1 + (x-1)*p, s)
+def binomial_pgf(gw_object, policy):
+
+    if gw_object.generations == 1:
+        p_stop_previous = 0
+    else:
+        p_stop_previous = gw_object.generation_data[gw_object.generations-1]['p_stop']
+
+    p_children = gw_object.generation_data[gw_object.generations]['p_children']
+    sigma = gw_object.generation_data[gw_object.generations]['sigma']
+
+    return np.power(1 + (p_stop_previous-1)*p_children, sigma)
 
 
 class GW(object):
@@ -17,7 +26,7 @@ class GW(object):
         self.generations = 0
         self.generation_data = {}
 
-    def add_generation(self, lattice_parameters, lattice_children, children_function):
+    def add_generation(self, lattice_parameters, lattice_children, children_function, policy):
         all_children = []
         p_children = 0
         self.generations += 1
@@ -35,21 +44,20 @@ class GW(object):
 
             all_children.extend(children)
 
-        sigma = len(all_children)
-        if sigma > 0:
-            p_children /= sigma
+        total_children = len(all_children)
+        if total_children > 0:
+            p_children /= total_children
 
-        if self.generations == 1:
-            p_stop = self.pgf(0, p_children, sigma)
-
-        else:
-            p_stop_previous = self.generation_data[self.generations-1]['p_stop']
-            p_stop = self.pgf(p_stop_previous, p_children, sigma)
+        sigma = total_children
+        if self.generations > 1 and self.generation_data[self.generations-1]['total_children'] > 0:
+            sigma /= self.generation_data[self.generations-1]['total_children']
 
         self.generation_data[self.generations] = {'p_children': p_children,
+                                                  'total_children': total_children,
                                                   'sigma': sigma,
-                                                  'mean': p_children*sigma,
-                                                  'p_stop': p_stop}
+                                                  'mean': p_children*sigma}
+
+        self.generation_data[self.generations]['p_stop'] = self.pgf(self, policy)
 
         self.history.extend(all_children)
         self.current_parents = all_children
@@ -80,7 +88,7 @@ class BranchModel(object):
     def next_generation(self, children_function, policy):
 
         for process in self.GWprocesses.values():
-            process.add_generation(self.lattice_parameters, self.lattice_children, children_function)
+            process.add_generation(self.lattice_parameters, self.lattice_children, children_function, policy)
 
         self.generations += 1
 
@@ -91,7 +99,6 @@ class BranchModel(object):
         for process in self.GWprocesses.values():
             p_stop *= process.generation_data[self.generations]['p_stop']
             generation_means = [process.generation_data[i]['mean'] for i in range(1, self.generations+1)]
-            # print(generation_means, np.prod(generation_means))
             mean += np.prod(generation_means)
 
         return mean, p_stop
