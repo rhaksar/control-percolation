@@ -30,6 +30,18 @@ class UBTfires(Policy):
 
         return np.amin([float(self.capacity)/boundary_size, 1])*self.delta_p
 
-    def control(self, branchmodel):
+    def control(self, simulation_object, branchmodel, control_map):
         control = defaultdict(lambda: (0, 0))
-        pass
+        boundary_size = len(branchmodel.boundary)
+        if boundary_size == 0:
+            return control
+
+        if boundary_size < self.capacity:
+            idx = range(boundary_size)
+        else:
+            idx = np.random.choice(boundary_size, size=self.capacity, replace=False)
+
+        for i in idx:
+            control[branchmodel.boundary[i]] = (0, control_map[branchmodel.boundary[i]])
+
+        return control
