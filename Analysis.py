@@ -1,17 +1,17 @@
 import numpy as np
 
 
-def binomial_pgf(gw_object, policy):
+def binomial_pgf(gw):
 
-    if gw_object.generations == 1:
+    if gw.generations == 1:
         p_stop_previous = 0
     else:
-        p_stop_previous = gw_object.generation_data[gw_object.generations-1]['p_stop']
+        p_stop_previous = gw.generation_data[gw.generations-1]['p_stop']
 
-    p_children = gw_object.generation_data[gw_object.generations]['p_children']
-    sigma = gw_object.generation_data[gw_object.generations]['sigma']
+    p_children = gw.generation_data[gw.generations]['p_children']
+    branch_factor = gw.generation_data[gw.generations]['branch_factor']
 
-    return np.power(1 + (p_stop_previous-1)*p_children, sigma)
+    return p_children*branch_factor, np.power(1 + (p_stop_previous-1)*p_children, branch_factor)
 
 
 class GW(object):
@@ -48,16 +48,21 @@ class GW(object):
         if total_children > 0:
             p_children /= total_children
 
-        sigma = total_children
+        branch_factor = total_children
         if self.generations > 1 and self.generation_data[self.generations-1]['total_children'] > 0:
-            sigma /= self.generation_data[self.generations-1]['total_children']
+            branch_factor /= self.generation_data[self.generations-1]['total_children']
+
+        # effect of control policy
+        delta_p_children = policy(self)
+        p_children = np.amax([p_children - delta_p_children, 0])
 
         self.generation_data[self.generations] = {'p_children': p_children,
                                                   'total_children': total_children,
-                                                  'sigma': sigma,
-                                                  'mean': p_children*sigma}
+                                                  'branch_factor': branch_factor}
 
-        self.generation_data[self.generations]['p_stop'] = self.pgf(self, policy)
+        mean, p_stop = self.pgf(self)
+        self.generation_data[self.generations]['mean'] = mean
+        self.generation_data[self.generations]['p_stop'] = p_stop
 
         self.history.extend(all_children)
         self.current_parents = all_children
@@ -74,6 +79,7 @@ class BranchModel(object):
 
         self.lattice_children = {}
         self.GWprocesses = {}
+        self.statistics = {}
 
         self.generations = 0
 
@@ -84,15 +90,24 @@ class BranchModel(object):
         self.boundary = self.boundary_function(simulation_object)
         self.GWprocesses = {i: GW(element, self.pgf)
                             for i, element in enumerate(self.boundary)}
+        self.statistics[0] = {'mean': len(self.boundary), 'p_stop': 0}
 
     def next_generation(self, children_function, policy):
 
         for process in self.GWprocesses.values():
-            process.add_generation(self.lattice_parameters, self.lattice_children, children_function, policy)
+            def process_policy(gw):
+                return policy.effect(self, gw)
+
+            process.add_generation(self.lattice_parameters,
+                                   self.lattice_children, children_function,
+                                   process_policy)
 
         self.generations += 1
 
-    def statistics(self):
+        mean, p_stop = self.model_statistics()
+        self.statistics[self.generations] = {'mean': mean, 'p_stop': p_stop}
+
+    def model_statistics(self):
         p_stop = 1
         mean = 0
 
@@ -102,3 +117,6 @@ class BranchModel(object):
             mean += np.prod(generation_means)
 
         return mean, p_stop
+
+    def prediction(self):
+        return self.statistics[self.generations]['mean'], self.statistics[self.generations]['p_stop']
