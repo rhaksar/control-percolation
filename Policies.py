@@ -4,14 +4,15 @@ import numpy as np
 
 class Policy(object):
 
-    def __init__(self, capacity, delta_p):
+    def __init__(self, capacity, control_map_percolation, control_map_gmdp):
         self.capacity = capacity
-        self.delta_p = delta_p
+        self.control_map_percolation = control_map_percolation
+        self.control_map_gmdp = control_map_gmdp
 
-    def effect(self, *args):
+    def effect(self, branchmodel, gw, parent_child):
         raise NotImplementedError
 
-    def control(self, *args):
+    def control(self, simulation_object, branchmodel):
         raise NotImplementedError
 
 
@@ -20,28 +21,29 @@ class UBTfires(Policy):
     Choose boundary nodes to apply action with uniform probability.
     """
 
-    def __init__(self, capacity, delta_p):
-        Policy.__init__(self, capacity, delta_p)
+    def __init__(self, capacity, control_map_percolation, control_map_gmdp):
+        Policy.__init__(self, capacity, control_map_percolation, control_map_gmdp)
 
-    def effect(self, branchmodel, gw):
+    def effect(self, branchmodel, gw, parent_child):
         boundary_size = branchmodel.statistics[branchmodel.generations]['mean']
         if boundary_size == 0:
-            return self.delta_p
+            return self.control_map_percolation[parent_child]
 
-        return np.amin([float(self.capacity)/boundary_size, 1])*self.delta_p
+        return np.amin([float(self.capacity)/boundary_size, 1])*self.control_map_percolation[parent_child]
 
-    def control(self, simulation_object, branchmodel, control_map):
+    def control(self, simulation_object, branchmodel):
         control = defaultdict(lambda: (0, 0))
-        boundary_size = len(branchmodel.boundary)
+        boundary = branchmodel.boundary
+        boundary_size = len(boundary)
         if boundary_size == 0:
             return control
 
-        if boundary_size < self.capacity:
+        if boundary_size <= self.capacity:
             idx = range(boundary_size)
         else:
             idx = np.random.choice(boundary_size, size=self.capacity, replace=False)
 
         for i in idx:
-            control[branchmodel.boundary[i]] = (0, control_map[branchmodel.boundary[i]])
+            control[boundary[i]] = self.control_map_gmdp[boundary[i]]
 
         return control
