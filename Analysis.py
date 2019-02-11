@@ -39,7 +39,8 @@ class GW(object):
             children = lattice_children[parent]
             children = [child for child in children if child != parent and child not in self.history]
 
-            child_parameters = [lattice_parameters[(parent, child)] for child in children]
+            child_parameters = [np.amax([lattice_parameters[(parent, child)] - policy(self, (parent, child)), 0])
+                                for child in children]
             p_children += 0 if not child_parameters else len(children)*np.mean(child_parameters)
 
             all_children.extend(children)
@@ -52,13 +53,13 @@ class GW(object):
         if self.generations > 1 and self.generation_data[self.generations-1]['total_children'] > 0:
             branch_factor /= self.generation_data[self.generations-1]['total_children']
 
-        # effect of control policy
-        delta_p_children = policy(self)
-        p_children = np.amax([p_children - delta_p_children, 0])
+        # delta_p_children = policy(self)
+        # p_children = np.amax([p_children - delta_p_children, 0])
 
         self.generation_data[self.generations] = {'p_children': p_children,
                                                   'total_children': total_children,
-                                                  'branch_factor': branch_factor}
+                                                  'branch_factor': branch_factor,
+                                                  'parents': self.current_parents}
 
         mean, p_stop = self.pgf(self)
         self.generation_data[self.generations]['mean'] = mean
@@ -95,8 +96,8 @@ class BranchModel(object):
     def next_generation(self, children_function, policy):
 
         for process in self.GWprocesses.values():
-            def process_policy(gw):
-                return policy.effect(self, gw)
+            def process_policy(gw, parent_child):
+                return policy.effect(self, gw, parent_child)
 
             process.add_generation(self.lattice_parameters,
                                    self.lattice_children, children_function,
