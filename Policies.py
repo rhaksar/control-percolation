@@ -84,17 +84,12 @@ class DWTfires(Policy):
                     coefficient[parent] = len(branchmodel.lattice_children[parent])
 
             def compute_coefficient(di, sum_di):
-                # return 1 - (1 - di/sum_di)**self.capacity
-                return (di*self.capacity)/sum_di
+                if sum_di == 0:
+                    return 1
+                return np.amin([(di*self.capacity)/sum_di, 1])
             coefficient = {parent: compute_coefficient(coefficient[parent], total_out_degree)
                            for parent in coefficient.keys()}
 
-            # weight = node_out_degree / total_out_degree
-            # coefficient = 1 - (1 - weight) ** self.capacity
-            # coefficient = 1 - (weight - weight*((1-weight)*weight)**self.capacity)/(weight**2 - weight + 1)
-            # coefficient = np.amin([float(self.capacity*node_out_degree*boundary_size)/total_out_degree, 1])
-
-            # print(coefficient)
             self.map = lambda parent_child: coefficient[parent_child[0]]*self.control_map_percolation[parent_child]
 
     def control(self, simulation_object, branchmodel):
