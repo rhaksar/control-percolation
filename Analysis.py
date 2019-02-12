@@ -31,10 +31,6 @@ class GW(object):
         p_children = 0
 
         for parent in self.current_parents:
-
-            # if parent not in lattice_children:
-            #     lattice_children[parent] = children_function(parent)
-
             children = lattice_children[parent]
             children = [child for child in children if child != parent and child not in self.history]
 
@@ -51,9 +47,6 @@ class GW(object):
         branch_factor = total_children
         if self.generations >= 1 and self.generation_data[self.generations]['total_children'] > 0:
             branch_factor /= self.generation_data[self.generations]['total_children']
-
-        # delta_p_children = policy(self)
-        # p_children = np.amax([p_children - delta_p_children, 0])
 
         self.generations += 1
         self.generation_data[self.generations] = {'p_children': p_children,
@@ -100,15 +93,12 @@ class BranchModel(object):
                 if parent not in self.lattice_children:
                     self.lattice_children[parent] = children_function(parent)
 
-        policy.cache_map(self)
+        policy.generate_map(self)
 
         for process in self.GWprocesses.values():
-            # def process_policy(parent_child):
-            #     return policy.effect(self, parent_child)
-
             process.add_generation(self.lattice_parameters,
                                    self.lattice_children,
-                                   policy.effect)
+                                   policy.map)
 
         self.generations += 1
 
