@@ -1,4 +1,5 @@
 from collections import defaultdict
+import copy
 import numpy as np
 
 
@@ -39,11 +40,13 @@ class UBTfires(Policy):
         control = defaultdict(lambda: (0, 0))
         boundary = branchmodel.boundary
         boundary_size = len(boundary)
+
         if boundary_size == 0:
             return control
 
-        if boundary_size <= self.capacity:
+        elif boundary_size <= self.capacity:
             idx = range(boundary_size)
+
         else:
             idx = np.random.choice(boundary_size, size=self.capacity, replace=False)
 
@@ -72,9 +75,11 @@ class DWTfires(Policy):
             total_out_degree = 0
             for process in branchmodel.GWprocesses.values():
                 for parent in process.current_parents:
-                    total_out_degree += len(branchmodel.lattice_children[parent])
+                    children = branchmodel.lattice_children[parent]
+                    children = [child for child in children if child != parent and child not in process.history]
 
-                    coefficient[parent] = len(branchmodel.lattice_children[parent])
+                    total_out_degree += len(children)
+                    coefficient[parent] = len(children)
 
             def compute_coefficient(di, sum_di):
                 if sum_di == 0:
@@ -89,18 +94,24 @@ class DWTfires(Policy):
         control = defaultdict(lambda: (0, 0))
         boundary = branchmodel.boundary
         boundary_size = len(boundary)
+
         if boundary_size == 0:
             return control
 
-        if boundary_size <= self.capacity:
+        elif boundary_size <= self.capacity:
             idx = range(boundary_size)
 
         else:
             total_out_degree = 0
-            for node in boundary:
-                total_out_degree += len(branchmodel.lattice_children[node])
+            probabilities = np.zeros(boundary_size)
+            for i, node in enumerate(boundary):
+                children = branchmodel.lattice_children[node]
+                children = [child for child in children if child != node]
+                total_out_degree += len(children)
+                # probabilities[i] = self.capacity*len(children)
+                probabilities[i] = len(children)
 
-            probabilities = [len(branchmodel.lattice_children[node])/total_out_degree for node in boundary]
+            # probabilities = np.minimum(probabilities/total_out_degree, 1)
             probabilities /= np.sum(probabilities)
 
             idx = np.random.choice(boundary_size, size=self.capacity, replace=False, p=probabilities)
@@ -135,8 +146,8 @@ class BFTfires(Policy):
 
                     children = branchmodel.lattice_children[parent]
                     children = [child for child in children if child != parent and child not in process.history]
-                    score = np.mean([branchmodel.lattice_parameters[(parent, child)] for child in children])
-                    score *= len(children)
+                    children_parameters = [branchmodel.lattice_parameters[(parent, child)] for child in children]
+                    score = 0 if not children_parameters else len(children)*np.mean(children_parameters)
 
                     elements.append((score, parent))
 
@@ -151,10 +162,11 @@ class BFTfires(Policy):
         control = defaultdict(lambda: (0, 0))
         boundary = branchmodel.boundary
         boundary_size = len(boundary)
+
         if boundary_size == 0:
             return control
 
-        if boundary_size <= self.capacity:
+        elif boundary_size <= self.capacity:
             idx = range(boundary_size)
 
         else:
@@ -174,5 +186,80 @@ class BFTfires(Policy):
 
         for i in idx:
             control[boundary[i]] = self.control_map_gmdp[boundary[i]]
+
+        return control
+
+
+class RHTfires(Policy):
+    """
+    Receding Horizon Treatment.
+    Deterministic policy that treats nodes with the largest future generation size.
+    """
+
+    def __init__(self, capacity, control_map_percolation, control_map_gmdp, horizon=3):
+        Policy.__init__(self, capacity, control_map_percolation, control_map_gmdp)
+        self.horizon = horizon
+
+    def generate_map(self, branchmodel):
+        boundary_size = branchmodel.statistics[branchmodel.generations]['mean']
+        if boundary_size <= self.capacity:
+            self.map = lambda parent_child: self.control_map_percolation[parent_child]
+
+        else:
+            coefficient = defaultdict(lambda: 0)
+
+            new_model = copy.copy(branchmodel)
+            new_model.generations = 0
+            new_model.lattice_children = branchmodel.lattice_children
+
+            new_boundary = []
+            for process in branchmodel.GWprocesses.values():
+                new_boundary.extend(process.current_parents)
+            new_model.set_boundary(new_boundary)
+
+            for _ in range(self.horizon):
+                new_model.next_generation(None)
+
+            elements = []
+            for node in new_model.boundary:
+                process = new_model.GWprocesses[node]
+                generation_means = [process.generation_data[i]['mean'] for i in range(1, new_model.generations+1)]
+                mean = np.prod(generation_means)
+                elements.append((mean, node))
+
+            elements = sorted(elements, key=lambda x: x[0], reverse=True)[:self.capacity]
+            elements = [e[1] for e in elements]
+            for e in elements:
+                coefficient[e] = 1
+
+            self.map = lambda parent_child: coefficient[parent_child[0]]*self.control_map_percolation[parent_child]
+
+    def control(self, simulation_object, branchmodel):
+        control = defaultdict(lambda: (0, 0))
+        boundary = branchmodel.boundary
+        boundary_size = len(boundary)
+
+        if boundary_size == 0:
+            return control
+
+        elif boundary_size <= self.capacity:
+            idx = range(boundary_size)
+
+            for i in idx:
+                control[boundary[i]] = self.control_map_gmdp[boundary[i]]
+
+        else:
+            elements = []
+            for node in branchmodel.boundary:
+                process = branchmodel.GWprocesses[node]
+                generation_means = [process.generation_data[i]['mean'] for i in range(1, branchmodel.generations+1)]
+                process_mean = np.prod(generation_means)
+                elements.append((process_mean, node))
+
+            elements = sorted(elements, key=lambda x: x[0], reverse=True)[:self.capacity]
+            elements = [e[1] for e in elements]
+
+            for e in elements:
+                control[e] = self.control_map_gmdp[e]
 
         return control
