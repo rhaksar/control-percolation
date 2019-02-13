@@ -6,7 +6,9 @@ sys.path.insert(0, os.getcwd() + '/simulators')
 
 from Analysis import BranchModel, binomial_pgf
 from fires.LatticeForest import LatticeForest
-from Policies import UBTfires, DWTfires, BFTfires
+from Policies import UBTfires, DWTfires, BFTfires, RHTfires
+
+np.seterr(all='raise')
 
 
 def latticeforest_boundary(latticeforest):
@@ -71,7 +73,7 @@ def uniform_lattice():
 
 def nonuniform_lattice(simulation):
     a = dict()
-    b = defaultdict(lambda: np.exp(-1/10))
+    b = defaultdict(lambda: np.exp(-1/9))
     lattice_p = dict()
 
     alpha_start = 0.2
@@ -114,21 +116,27 @@ def benchmark(simulation, branchmodel, policy, num_generations=1, num_simulation
 
         while not sim.early_end:
             branchmodel.reset()
-            branchmodel.set_boundary(simulation)
+            branchmodel.set_boundary(latticeforest_boundary(simulation))
 
             def children_function(parent):
                 return latticeforest_children(sim, parent)
+            branchmodel.set_children_function(children_function)
 
             for _ in range(num_generations):
-                bm.next_generation(children_function, policy)
+                branchmodel.next_generation(policy)
 
             # apply control and update simulator
-            control = policy.control(sim, bm)
-            sim.update(control)
+            sim.update(policy.control(sim, branchmodel))
+
+        if (seed+1) % 100 == 0:
+            print('completed {0:d} simulations'.format((seed+1)))
 
         results.append(simulation.stats[0]/np.sum(simulation.stats))
 
+    print('median remaining trees: {0:0.2f}%'.format(100*np.median(results)))
     print('average remaining trees: {0:0.2f}%'.format(100*np.mean(results)))
+    print('minimum {0:0.2f}, maximum {1:0.2f}'.format(100*np.amin(results), 100*np.amax(results)))
+    return
 
 
 # def generic_boundary(foo):
@@ -164,23 +172,24 @@ if __name__ == '__main__':
     sim = LatticeForest(dimension, alpha=alpha, beta=beta)
 
     # define policy
-    # policy = UBTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
-    # policy = DWTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
-    policy = BFTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
+    horizon = 3
+    # pi = UBTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
+    # pi = DWTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
+    # pi = BFTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
+    pi = RHTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp,
+                  horizon=horizon)
 
-    # instantiate branching process model approximation
-    bm = BranchModel(boundary_function=latticeforest_boundary,
-                     lattice_parameters=lattice_parameters,
-                     pgf=binomial_pgf)
+    # create branching process model approximation
+    bm = BranchModel(lattice_parameters=lattice_parameters, pgf=binomial_pgf)
 
-    # benchmark(sim, bm, policy, num_simulations=1)
+    # benchmark(sim, bm, pi, num_generations=horizon, num_simulations=200)
 
-    np.random.seed(3)
-    for _ in range(10):
+    np.random.seed(5)
+    # for _ in range(1):
     # while not sim.early_end:
 
         bm.reset()
-        bm.set_boundary(sim)
+        bm.set_boundary(latticeforest_boundary(sim))
 
         print('sim iteration %d' % sim.iter)
         mean, p_stop = bm.prediction()
@@ -188,9 +197,10 @@ if __name__ == '__main__':
 
         def children_function(parent):
             return latticeforest_children(sim, parent)
+        bm.set_children_function(children_function)
 
         for n in range(5):
-            bm.next_generation(children_function, policy)
+            bm.next_generation(pi)
             mean, p_stop = bm.prediction()
             print('generation {0:2d}: mean {1:6.2f} | stop {2:5.2f}%'.format(n+1, mean, 100*p_stop))
 
