@@ -1,6 +1,19 @@
 import numpy as np
 
 
+# helper function to carefully multiply probabilities
+def multiply_probabilities(values):
+    tolerance = 1e-100
+    if any([v < 1e-100 for v in values]):
+        return 0
+    else:
+        sum_log = sum([np.log(v) for v in values])
+        if sum_log <= np.log(tolerance):
+            return 0
+        else:
+            return np.exp(sum_log)
+
+
 def binomial_pgf(gw):
 
     if gw.generations == 1:
@@ -64,10 +77,10 @@ class GW(object):
 
 class BranchModel(object):
 
-    def __init__(self, boundary_function, lattice_parameters, pgf):
+    def __init__(self, lattice_parameters, pgf):
         self.boundary = None
+        self.children_function = None
 
-        self.boundary_function = boundary_function
         self.lattice_parameters = lattice_parameters
         self.pgf = pgf
 
@@ -78,27 +91,37 @@ class BranchModel(object):
         self.generations = 0
 
     def reset(self):
-        self.__init__(self.boundary_function, self.lattice_parameters, self.pgf)
+        self.__init__(self.lattice_parameters, self.pgf)
 
-    def set_boundary(self, simulation_object):
-        self.boundary = self.boundary_function(simulation_object)
-        self.GWprocesses = {i: GW(element, self.pgf)
-                            for i, element in enumerate(self.boundary)}
+    def set_boundary(self, boundary):
+        self.boundary = boundary
+        self.GWprocesses = {element: GW(element, self.pgf) for element in self.boundary}
         self.statistics[0] = {'mean': len(self.boundary), 'p_stop': 0}
 
-    def next_generation(self, children_function, policy):
+    def set_children_function(self, children_function):
+        self.children_function = children_function
+
+    def next_generation(self, policy):
 
         for process in self.GWprocesses.values():
             for parent in process.current_parents:
                 if parent not in self.lattice_children:
-                    self.lattice_children[parent] = children_function(parent)
+                    self.lattice_children[parent] = self.children_function(parent)
 
-        policy.generate_map(self)
+        if policy is None:
+            def policy_map(parent_child):
+                return 0
+
+        else:
+            policy.generate_map(self)
+
+            def policy_map(parent_child):
+                return policy.map(parent_child)
 
         for process in self.GWprocesses.values():
             process.add_generation(self.lattice_parameters,
                                    self.lattice_children,
-                                   policy.map)
+                                   policy_map)
 
         self.generations += 1
 
@@ -106,14 +129,15 @@ class BranchModel(object):
         self.statistics[self.generations] = {'mean': mean, 'p_stop': p_stop}
 
     def model_statistics(self):
-        p_stop = 1
+        p_values = []
         mean = 0
 
         for process in self.GWprocesses.values():
-            p_stop *= process.generation_data[self.generations]['p_stop']
+            p_values.append(process.generation_data[self.generations]['p_stop'])
             generation_means = [process.generation_data[i]['mean'] for i in range(1, self.generations+1)]
             mean += np.prod(generation_means)
 
+        p_stop = multiply_probabilities(p_values)
         return mean, p_stop
 
     def prediction(self):
