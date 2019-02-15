@@ -191,14 +191,30 @@ class BFTfires(Policy):
 
 
 class RHTfires(Policy):
-    """
-    Receding Horizon Treatment.
-    Deterministic policy that treats nodes with the largest future generation size.
-    """
 
-    def __init__(self, capacity, control_map_percolation, control_map_gmdp, horizon=3):
+    def __init__(self, capacity, control_map_percolation, control_map_gmdp, horizon):
         Policy.__init__(self, capacity, control_map_percolation, control_map_gmdp)
         self.horizon = horizon
+        self.rollout_policy = UBTfires(capacity=self.capacity,
+                                       control_map_percolation=self.control_map_percolation,
+                                       control_map_gmdp=self.control_map_gmdp)
+
+    def get_score(self, p, hist, branchmodel, counter=1):
+        if p not in branchmodel.lattice_children:
+            branchmodel.lattice_children[p] = branchmodel.children_function(p)
+
+        cs = branchmodel.lattice_children[p]
+        cs = [ci for ci in cs if ci != p and ci not in hist]
+
+        if counter == self.horizon:
+            c_parameters = [branchmodel.lattice_parameters[(p, ci)] for ci in cs]
+            s = 0 if not c_parameters else len(cs)*np.mean(c_parameters)
+            return s
+
+        else:
+            hist.extend(cs)
+            ss = [self.get_score(ci, hist, branchmodel, counter+1) for ci in cs]
+            return np.sum(ss)
 
     def generate_map(self, branchmodel):
         boundary_size = branchmodel.statistics[branchmodel.generations]['mean']
@@ -208,24 +224,11 @@ class RHTfires(Policy):
         else:
             coefficient = defaultdict(lambda: 0)
 
-            new_model = copy.copy(branchmodel)
-            new_model.generations = 0
-            new_model.lattice_children = branchmodel.lattice_children
-
-            new_boundary = []
-            for process in branchmodel.GWprocesses.values():
-                new_boundary.extend(process.current_parents)
-            new_model.set_boundary(new_boundary)
-
-            for _ in range(self.horizon):
-                new_model.next_generation(None)
-
             elements = []
-            for node in new_model.boundary:
-                process = new_model.GWprocesses[node]
-                generation_means = [process.generation_data[i]['mean'] for i in range(1, new_model.generations+1)]
-                mean = np.prod(generation_means)
-                elements.append((mean, node))
+            for process in branchmodel.GWprocesses.values():
+                for parent in process.current_parents:
+                    score = self.get_score(parent, [], branchmodel)
+                    elements.append((score, parent))
 
             elements = sorted(elements, key=lambda x: x[0], reverse=True)[:self.capacity]
             elements = [e[1] for e in elements]
@@ -245,21 +248,94 @@ class RHTfires(Policy):
         elif boundary_size <= self.capacity:
             idx = range(boundary_size)
 
-            for i in idx:
-                control[boundary[i]] = self.control_map_gmdp[boundary[i]]
-
         else:
-            elements = []
-            for node in branchmodel.boundary:
-                process = branchmodel.GWprocesses[node]
-                generation_means = [process.generation_data[i]['mean'] for i in range(1, branchmodel.generations+1)]
-                process_mean = np.prod(generation_means)
-                elements.append((process_mean, node))
+            idx = []
+            for i, node in enumerate(boundary):
+                score = self.get_score(node, [], branchmodel)
+                idx.append((score, i))
 
-            elements = sorted(elements, key=lambda x: x[0], reverse=True)[:self.capacity]
-            elements = [e[1] for e in elements]
+            idx = sorted(idx, key=lambda x: x[0], reverse=True)[:self.capacity]
+            idx = [e[1] for e in idx]
 
-            for e in elements:
-                control[e] = self.control_map_gmdp[e]
+        for i in idx:
+            control[boundary[i]] = self.control_map_gmdp[boundary[i]]
 
         return control
+
+
+# class RHTfiresNeedsWork(Policy):
+#     """
+#     Receding Horizon Treatment.
+#     Deterministic policy that treats nodes with the largest future generation size.
+#     """
+#
+#     def __init__(self, capacity, control_map_percolation, control_map_gmdp, horizon=3):
+#         Policy.__init__(self, capacity, control_map_percolation, control_map_gmdp)
+#         self.horizon = horizon
+#         self.rollout_policy = UBTfires(capacity=self.capacity,
+#                                        control_map_percolation=self.control_map_percolation,
+#                                        control_map_gmdp=self.control_map_gmdp)
+#
+#     def generate_map(self, branchmodel):
+#         boundary_size = branchmodel.statistics[branchmodel.generations]['mean']
+#         if boundary_size <= self.capacity:
+#             self.map = lambda parent_child: self.control_map_percolation[parent_child]
+#
+#         else:
+#             coefficient = defaultdict(lambda: 0)
+#
+#             new_model = copy.deepcopy(branchmodel)
+#             new_model.generations = 0
+#             new_model.lattice_children = branchmodel.lattice_children
+#
+#             new_boundary = []
+#             for process in branchmodel.GWprocesses.values():
+#                 new_boundary.extend(process.current_parents)
+#             new_model.set_boundary(new_boundary)
+#
+#             for _ in range(self.horizon):
+#                 new_model.next_generation(self.rollout_policy)
+#
+#             elements = []
+#             for node in new_model.boundary:
+#                 process = new_model.GWprocesses[node]
+#                 generation_means = [process.generation_data[i]['mean'] for i in range(1, new_model.generations+1)]
+#                 mean = np.prod(generation_means)
+#                 elements.append((mean, node))
+#
+#             elements = sorted(elements, key=lambda x: x[0], reverse=True)[:self.capacity]
+#             elements = [e[1] for e in elements]
+#             for e in elements:
+#                 coefficient[e] = 1
+#
+#             self.map = lambda parent_child: coefficient[parent_child[0]]*self.control_map_percolation[parent_child]
+#
+#     def control(self, simulation_object, branchmodel):
+#         control = defaultdict(lambda: (0, 0))
+#         boundary = branchmodel.boundary
+#         boundary_size = len(boundary)
+#
+#         if boundary_size == 0:
+#             return control
+#
+#         elif boundary_size <= self.capacity:
+#             idx = range(boundary_size)
+#
+#             for i in idx:
+#                 control[boundary[i]] = self.control_map_gmdp[boundary[i]]
+#
+#         else:
+#             elements = []
+#             for node in branchmodel.boundary:
+#                 process = branchmodel.GWprocesses[node]
+#                 generation_means = [process.generation_data[i]['mean'] for i in range(1, branchmodel.generations+1)]
+#                 process_mean = np.prod(generation_means)
+#                 elements.append((process_mean, node))
+#
+#             elements = sorted(elements, key=lambda x: x[0], reverse=True)[:self.capacity]
+#             elements = [e[1] for e in elements]
+#
+#             for e in elements:
+#                 control[e] = self.control_map_gmdp[e]
+#
+#         return control
