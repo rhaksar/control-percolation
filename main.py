@@ -2,6 +2,7 @@ from collections import defaultdict
 import numpy as np
 import os
 import sys
+import time
 sys.path.insert(0, os.getcwd() + '/simulators')
 
 from Analysis import BranchModel, binomial_pgf
@@ -107,6 +108,8 @@ def nonuniform_lattice(simulation):
 
 def benchmark(simulation, branchmodel, policy, num_generations=1, num_simulations=1):
 
+    print('started at {0:s}'.format(time.strftime('%d-%b-%Y %H:%M')))
+    tic = time.clock()
     results = []
 
     for seed in range(num_simulations):
@@ -128,14 +131,21 @@ def benchmark(simulation, branchmodel, policy, num_generations=1, num_simulation
             # apply control and update simulator
             sim.update(policy.control(sim, branchmodel))
 
-        if (seed+1) % 100 == 0:
+        if (seed+1) % 10 == 0:
             print('completed {0:d} simulations'.format((seed+1)))
 
         results.append(simulation.stats[0]/np.sum(simulation.stats))
 
+    toc = time.clock()
+    dt = toc - tic
+    print('finished at {0:s}'.format(time.strftime('%d-%b-%Y %H:%M')))
+    print('{0:0.2f}s = {1:0.2f}m = {2:0.2f}h elapsed'.format(dt, dt/60, dt/3600))
+
     print('median remaining trees: {0:0.2f}%'.format(100*np.median(results)))
-    print('average remaining trees: {0:0.2f}%'.format(100*np.mean(results)))
+    print('mean remaining trees: {0:0.2f}%'.format(100*np.mean(results)))
     print('minimum {0:0.2f}, maximum {1:0.2f}'.format(100*np.amin(results), 100*np.amax(results)))
+    first, third = np.percentile(results, [25, 75])
+    print('1st quartile {0:0.2f}, 3rd quartile {1:0.2f}'.format(100*first, 100*third))
     return
 
 
@@ -168,25 +178,24 @@ if __name__ == '__main__':
 
     # generate information for uniform or non-uniform case
     # alpha, beta, lattice_parameters, control_percolation, control_gmdp = uniform_lattice()
-    alpha, beta, lattice_parameters, control_percolation, control_gmdp = nonuniform_lattice(LatticeForest(dimension))
+    alpha, beta, lattice_parameters, map_percolation, map_gmdp = nonuniform_lattice(LatticeForest(dimension))
     sim = LatticeForest(dimension, alpha=alpha, beta=beta)
 
     # define policy
-    horizon = 3
-    # pi = UBTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
-    # pi = DWTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
-    # pi = BFTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
-    pi = RHTfires(capacity=10, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp,
-                  horizon=horizon)
+    cap = 6
+    # pi = UBTfires(capacity=cap, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
+    # pi = DWTfires(capacity=cap, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
+    # pi = BFTfires(capacity=cap, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
+    pi = RHTfires(capacity=cap, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp, horizon=5)
 
     # create branching process model approximation
     bm = BranchModel(lattice_parameters=lattice_parameters, pgf=binomial_pgf)
 
-    # benchmark(sim, bm, pi, num_generations=horizon, num_simulations=200)
+    # benchmark(sim, bm, pi, num_generations=1, num_simulations=500)
 
-    np.random.seed(5)
-    # for _ in range(1):
-    # while not sim.early_end:
+    np.random.seed(3)
+    # for _ in range(10):
+    while not sim.early_end:
 
         bm.reset()
         bm.set_boundary(latticeforest_boundary(sim))
@@ -199,13 +208,13 @@ if __name__ == '__main__':
             return latticeforest_children(sim, parent)
         bm.set_children_function(children_function)
 
-        for n in range(5):
+        for n in range(1):
             bm.next_generation(pi)
             mean, p_stop = bm.prediction()
             print('generation {0:2d}: mean {1:6.2f} | stop {2:5.2f}%'.format(n+1, mean, 100*p_stop))
 
         # apply control and update simulator
-        control = policy.control(sim, bm)
+        control = pi.control(sim, bm)
         sim.update(control)
         print()
 
