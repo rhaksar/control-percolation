@@ -6,13 +6,15 @@ import time
 sys.path.insert(0, os.getcwd() + '/simulators')
 
 from Analysis import BranchModel, binomial_pgf
+from fires.ForestElements import Tree
 from fires.LatticeForest import LatticeForest
-from Policies import UBTfires, DWTfires, BFTfires, RHTfires
+from fires.UrbanForest import UrbanForest
+from Policies import *
 
 np.seterr(all='raise')
 
 
-def latticeforest_boundary(latticeforest):
+def latticeforest_fireboundary(latticeforest):
     boundary = []
     for fire in latticeforest.fires:
         element = latticeforest.group[fire]
@@ -20,6 +22,27 @@ def latticeforest_boundary(latticeforest):
                      if any(isinstance(latticeforest.group[j], t) for t in element.neighbors_types)]
         if neighbors.count(True) > 0:
             boundary.append(fire)
+
+    return boundary
+
+
+def latticeforest_urbanboundary(urbanforest):
+    boundary = []
+
+    for urban in urbanforest.urban_elements:
+        element = urbanforest.group[urban]
+
+        if element.state == 0:
+            count = 0
+            for j in element.neighbors:
+                neighbor_element = urbanforest.group[j]
+                if isinstance(neighbor_element, Tree):
+                    if neighbor_element.is_healthy(neighbor_element.state) \
+                            or neighbor_element.is_on_fire(neighbor_element.state):
+                        count += 1
+
+        if count > 0:
+            boundary.append(urban)
 
     return boundary
 
@@ -50,7 +73,7 @@ def uniform_lattice():
     b = np.exp(-1/10)
     p = percolation_parameter(a, b)
     if p <= 0.5:
-        raise Exception('Percolation paramter {0:0.2f} is not supercritical'.format(p))
+        raise Warning('Percolation paramter {0:0.2f} is not supercritical'.format(p))
     lattice_p = defaultdict(lambda: p)
 
     # given (delta_alpha, delta_beta), construct the equivalent delta_p
@@ -58,7 +81,7 @@ def uniform_lattice():
     delta_b = 0.4
     dp = equivalent_percolation_control(a, b, delta_a, delta_b)
     if p - dp >= 0.5:
-        raise Exception('Control is insufficient: p - dp = {0:0.2f} - {1:0.2f} = {2:0.2f}'.format(p, dp, p-dp))
+        raise Warning('Control is insufficient: p - dp = {0:0.2f} - {1:0.2f} = {2:0.2f}'.format(p, dp, p-dp))
     control_p = defaultdict(lambda: dp)
     control_ab = defaultdict(lambda: (delta_a, delta_b))
 
@@ -77,28 +100,30 @@ def nonuniform_lattice(simulation):
     b = defaultdict(lambda: np.exp(-1/9))
     lattice_p = dict()
 
+    delta_b = 0.35
+    control_ab = dict()
+
     alpha_start = 0.2
     alpha_end = 0.3
     for r in range(simulation.dims[0]):
         for c in range(simulation.dims[1]):
             a[(r, c)] = alpha_start + (c/(simulation.dims[1]-1))*(alpha_end-alpha_start)
 
-    delta_a = 0
-    delta_b = 0.35
-    control_p = dict()
-    control_ab = defaultdict(lambda: (delta_a, delta_b))
+            control_ab[(r, c)] = (a[(r, c)], delta_b)
 
+    control_p = dict()
     for tree_rc in simulation.group.keys():
         for j in simulation.group[tree_rc].neighbors:
             p = percolation_parameter(a[j], b[tree_rc])
             if p <= 0.5:
-                raise Exception('Percolation parameter {0:0.2f} is not supercritical'.format(p))
+                raise Warning('Percolation parameter {0:0.2f} is not supercritical'.format(p))
 
             lattice_p[(tree_rc, j)] = p
 
-            dp = equivalent_percolation_control(a[j], b[tree_rc], delta_a, delta_b)
+            da, db = control_ab[j]
+            dp = equivalent_percolation_control(a[j], b[tree_rc], da, db)
             if p - dp >= 0.5:
-                raise Exception('Control is insufficient: p - dp = {0:0.2f} - {1:0.2f} = {2:0.2f}'.
+                raise Warning('Control is insufficient: p - dp = {0:0.2f} - {1:0.2f} = {2:0.2f}'.
                                 format(p, dp, p - dp))
 
             control_p[(tree_rc, j)] = dp
@@ -119,7 +144,7 @@ def benchmark(simulation, branchmodel, policy, num_generations=1, num_simulation
 
         while not sim.early_end:
             branchmodel.reset()
-            branchmodel.set_boundary(latticeforest_boundary(simulation))
+            branchmodel.set_boundary(latticeforest_fireboundary(simulation))
 
             def children_function(parent):
                 return latticeforest_children(sim, parent)
@@ -149,29 +174,7 @@ def benchmark(simulation, branchmodel, policy, num_generations=1, num_simulation
     return
 
 
-# def generic_boundary(foo):
-#     return [1]
-#
-#
-# def generic_children(foo, bar):
-#     return [2, 3]
-
 if __name__ == '__main__':
-    # bm = BranchModel(boundary_function=generic_boundary,
-    #                  lattice_parameters=defaultdict(lambda: 0.2),
-    #                  pgf=binomial_pgf)
-    #
-    # bm.reset()
-    # bm.set_boundary(None)
-    #
-    # def children_function(parent):
-    #     return generic_children(None, parent)
-    #
-    # for n in range(5):
-    #     bm.next_generation(children_function, None)
-    #     mean, p_stop = bm.statistics()
-    #     # print(bm.GWprocesses[0].generation_data[n+1])
-    #     print('generation %d: mean %0.4f, p_stop %0.4e' % (n+1, mean, p_stop))
 
     # forest size
     dimension = 50
@@ -179,26 +182,31 @@ if __name__ == '__main__':
     # generate information for uniform or non-uniform case
     # alpha, beta, lattice_parameters, control_percolation, control_gmdp = uniform_lattice()
     alpha, beta, lattice_parameters, map_percolation, map_gmdp = nonuniform_lattice(LatticeForest(dimension))
-    sim = LatticeForest(dimension, alpha=alpha, beta=beta)
+    # sim = LatticeForest(dimension, alpha=alpha, beta=beta)
+    sim = UrbanForest(dimension, alpha=alpha, beta=beta)
 
     # define policy
-    cap = 6
-    # pi = UBTfires(capacity=cap, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
-    # pi = DWTfires(capacity=cap, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
-    # pi = BFTfires(capacity=cap, control_map_percolation=control_percolation, control_map_gmdp=control_gmdp)
-    pi = RHTfires(capacity=cap, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp, horizon=5)
+    cap = 7
+    # pi = UBTfires(capacity=cap, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp)
+    # pi = DWTfires(capacity=cap, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp)
+    # pi = BFTfires(capacity=cap, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp)
+    # pi = RHTfires(capacity=cap, horizon=3, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp)
+    pi = UPTfires(capacity=cap, horizon=5, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp)
 
     # create branching process model approximation
     bm = BranchModel(lattice_parameters=lattice_parameters, pgf=binomial_pgf)
 
     # benchmark(sim, bm, pi, num_generations=1, num_simulations=500)
 
-    np.random.seed(3)
-    # for _ in range(10):
-    while not sim.early_end:
+    np.random.seed(7)
+    for _ in range(50):
+    # while not sim.early_end:
 
         bm.reset()
-        bm.set_boundary(latticeforest_boundary(sim))
+        bm.set_boundary(latticeforest_fireboundary(sim))
+
+        pi.urbanboundary = latticeforest_urbanboundary(sim)
+        print(len(pi.urbanboundary))
 
         print('sim iteration %d' % sim.iter)
         mean, p_stop = bm.prediction()
@@ -208,15 +216,30 @@ if __name__ == '__main__':
             return latticeforest_children(sim, parent)
         bm.set_children_function(children_function)
 
-        for n in range(1):
+        for n in range(2):
             bm.next_generation(pi)
             mean, p_stop = bm.prediction()
             print('generation {0:2d}: mean {1:6.2f} | stop {2:5.2f}%'.format(n+1, mean, 100*p_stop))
 
         # apply control and update simulator
-        control = pi.control(sim, bm)
+        control, urban_control = pi.control(sim, bm)
+        for ub in urban_control:
+            print(ub, sim.group[ub].state, control[ub])
+
         sim.update(control)
+
+        for ub in urban_control:
+            print(ub, sim.group[ub].state, control[ub])
+
         print()
 
     print('remaining trees: {0:0.2f}%'.format(100*sim.stats[0]/np.sum(sim.stats)))
+
+    ub_states = []
+    for ub in sim.urban_elements:
+        ub_states.append(sim.group[ub].state)
+
+    print([True if ub == 3 else False for ub in ub_states].count(True))
+    print([True if ub == 0 else False for ub in ub_states].count(True))
+
     print()
