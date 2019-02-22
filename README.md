@@ -8,4 +8,5 @@
 ### Files
 - `Analysis.py`: Approximates percolation on a lattice using a set of Galton-Watson branching processes. Provides estimates of the rate of growth and stopping time of percolation. 
 - `main.py`: Demonstrates use of different policies with the model approximation on simulations of forest fires.
-- `Policies`: Defines stochastic/deterministic policies for controlling a forest fire. 
+- `Policies.py`: Defines stochastic/deterministic policies for controlling a forest fire. 
+- `Utilities.py`: Helper functions to simplify implementation of model approximation and policies. 
