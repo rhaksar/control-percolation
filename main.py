@@ -7,7 +7,7 @@ import time
 import warnings
 sys.path.insert(0, os.getcwd() + '/simulators')
 
-from Analysis import BranchModel, binomial_pgf
+from Analysis import StaticModel, BranchModel, binomial_pgf
 from fires.LatticeForest import LatticeForest
 from fires.UrbanForest import UrbanForest
 from Utilities import *
@@ -148,18 +148,21 @@ if __name__ == '__main__':
 
     # create branching process model approximation
     bm = BranchModel(lattice_parameters=p_parameters, pgf=binomial_pgf)
+    um = StaticModel()
 
     # benchmark(sim, bm, pi, num_generations=1, num_simulations=500)
 
     np.random.seed(10)
-    for _ in range(50):
-    # while not sim.early_end:
+    # for _ in range(45):  # 50
+    while not sim.early_end:
 
         bm.reset()
     
         bm.set_boundary(fire_boundary(sim))
-        pi.urbanboundary = urban_boundary(sim)
-        print('urban boundary size:', len(pi.urbanboundary))
+        um.set_boundary(urban_boundary(sim))
+        # pi.urbanboundary = urban_boundary(sim)
+        print('fire boundary size:', len(bm.boundary))
+        print('urban boundary size:', len(um.boundary))
 
         print('sim iteration %d' % sim.iter)
         mean, p_stop = bm.prediction()
@@ -170,12 +173,18 @@ if __name__ == '__main__':
         bm.set_children_function(children_function)
 
         for n in range(1):
+            pi.generate_map(bm, um)
+
             bm.next_generation(pi)
             mean, p_stop = bm.prediction()
             print('generation {0:2d}: mean {1:6.2f} | stop {2:5.2f}%'.format(n+1, mean, 100*p_stop))
 
+            um.next_boundary(pi)
+
         # apply control and update simulator
-        control = pi.control(sim, bm)
+        control = pi.control(sim, bm, um)
+        dense_state = sim.dense_state()
+
         sim.update(control)
 
         dense_state = sim.dense_state()
@@ -187,8 +196,8 @@ if __name__ == '__main__':
     for ub in sim.urban:
         ub_states.append(sim.group[ub].state)
 
-    print([True if ub == 3 else False for ub in ub_states].count(True))
-    print([True if ub == 0 else False for ub in ub_states].count(True))
+    print('removed urban areas:', [True if ub == 3 else False for ub in ub_states].count(True))
+    print('remaining urban areas:', [True if ub == 0 else False for ub in ub_states].count(True))
 
     dense_state = sim.dense_state()
 
