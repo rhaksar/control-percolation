@@ -108,7 +108,7 @@ class BranchModel(object):
                 if parent not in self.lattice_children:
                     self.lattice_children[parent] = self.children_function(parent)
 
-        policy.generate_map(self)
+        # policy.generate_map(self)
         for process in self.GWprocesses.values():
             process.add_generation(self.lattice_parameters,
                                    self.lattice_children,
@@ -133,3 +133,17 @@ class BranchModel(object):
 
     def prediction(self):
         return self.statistics[self.generations]['mean'], self.statistics[self.generations]['p_stop']
+
+
+class StaticModel(object):
+
+    def __init__(self):
+        self.boundary = None
+        self.current_boundary = None
+
+    def set_boundary(self, boundary):
+        self.boundary = boundary
+        self.current_boundary = self.boundary
+
+    def next_boundary(self, policy):
+        self.current_boundary = [b for b in self.current_boundary if b not in policy.control_decisions]
