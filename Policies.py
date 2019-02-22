@@ -1,6 +1,7 @@
 from collections import defaultdict
-import copy
 import numpy as np
+
+from Utilities import *
 
 
 class Policy(object):
@@ -9,7 +10,7 @@ class Policy(object):
         self.capacity = capacity
         self.control_map_percolation = control_map_percolation
         self.control_map_gmdp = control_map_gmdp
-        self.map = None
+        # self.map = None
 
         self.urbanboundary = []
 
@@ -274,9 +275,13 @@ class UPTfires(Policy):
     Treat fires and cut down healthy trees to preserve an urban region.
     """
 
-    def __init__(self, horizon, capacity, control_map_percolation, control_map_gmdp):
-        Policy.__init__(self, capacity, control_map_percolation, control_map_gmdp)
+    def __init__(self, horizon, capacity, control_map_gmdp, alpha_set, beta_set):
+        Policy.__init__(self, capacity, None, control_map_gmdp)
         self.horizon = horizon
+
+        self.control_decisions = []
+        self.alpha_set = alpha_set
+        self.beta_set = beta_set
 
     def get_score(self, p, hist, branchmodel, counter=1):
         if p not in branchmodel.lattice_children:
@@ -295,8 +300,19 @@ class UPTfires(Policy):
             ss = [self.get_score(ci, hist, branchmodel, counter+1)[0] for ci in cs]
             return np.sum(ss), hist
 
-    def generate_map(self, branchmodel):
+    def map(self, parent, child):
+        alpha = self.alpha_set[child]
+        beta = self.beta_set[parent]
 
+        delta_alpha, delta_beta = 0, 0
+        if parent in self.control_decisions:
+            _, delta_beta = self.control_map_gmdp[parent]['on_fire']
+        if child in self.control_decisions:
+            delta_alpha, _ = self.control_map_gmdp[child]['healthy']
+
+        return percolation_parameter(alpha, beta) - percolation_parameter(alpha-delta_alpha, beta-delta_beta)
+
+    def generate_map(self, branchmodel):
         fires_order = []
         histories = {}
         for process in branchmodel.GWprocesses.values():
@@ -316,7 +332,7 @@ class UPTfires(Policy):
             if score > 0:
                 urban_order.append((score, ub))
 
-        coefficient = defaultdict(lambda: 0)
+        # coefficient = defaultdict(lambda: 0)
         if len(urban_order) > 0:
             if len(urban_order) <= self.capacity:
                 sorted_order = [ub[1] for ub in urban_order]
@@ -325,14 +341,14 @@ class UPTfires(Policy):
                 sorted_order = [s[1] for s in sorted_order]
 
             for e in sorted_order:
-                coefficient[e] = 1
+                self.control_decisions.append(e)
 
             extra_control = self.capacity - len(urban_order)
             if extra_control > 0:
                 sorted_order = sorted(fires_order, key=lambda x: (x[0], x[1]), reverse=True)[:extra_control]
                 sorted_order = [f[2] for f in sorted_order]
                 for e in sorted_order:
-                    coefficient[e] = 1
+                    self.control_decisions.append(e)
 
         elif len(fires_order) > 0:
             if len(fires_order) <= self.capacity:
@@ -342,74 +358,85 @@ class UPTfires(Policy):
                 sorted_order = [f[2] for f in sorted_order]
 
             for e in sorted_order:
-                coefficient[e] = 1
+                self.control_decisions.append(e)
 
         else:
-            self.map = lambda parent_child: self.control_map_percolation[parent_child]
+            # self.map = lambda parent_child: self.control_map_percolation[parent_child]
             return
 
-        self.map = lambda parent_child: coefficient[parent_child[0]]*self.control_map_percolation[parent_child]
+        # self.map = lambda parent_child: coefficient[parent_child[0]]*self.control_map_percolation[parent_child]
+        return
 
     def control(self, simulation_object, branchmodel):
         control = defaultdict(lambda: (0, 0))
 
-        fires_order = []
-        histories = {}
-        for parent in branchmodel.boundary:
-            score1 = parent[1]
-            score2, parent_history = self.get_score(parent, [], branchmodel)
-            fires_order.append((score1, score2, parent))
-            histories[parent] = parent_history
+        for fire in branchmodel.boundary:
+            if fire in self.control_decisions:
+                control[fire] = self.control_map_gmdp[fire]['on_fire']
 
-        urban_order = []
-        for ub in self.urbanboundary:
-            score = 0
-            for parent in histories.keys():
-                if ub in histories[parent]:
-                    score += 1
+        for urban in self.urbanboundary:
+            if urban in self.control_decisions:
+                control[urban] = self.control_map_gmdp[urban]['healthy']
 
-            if score > 0:
-                urban_order.append((score, ub))
+        self.control_decisions = []
+        return control
 
-        urban_control = []
-        control_elements = []
-        if len(urban_order) > 0:
-            if len(urban_order) <= self.capacity:
-                sorted_order = [ub[1] for ub in urban_order]
-            else:
-                sorted_order = sorted(urban_order, key=lambda x: x[0], reverse=True)[:self.capacity]
-                sorted_order = [e[1] for e in sorted_order]
-
-            for e in sorted_order:
-                print('treating urban boundary', e)
-                urban_control.append(e)
-                control_elements.append(e)
-
-            extra_control = self.capacity - len(urban_order)
-            if extra_control > 0:
-                sorted_order = sorted(fires_order, key=lambda x: (x[0], x[1]), reverse=True)[:extra_control]
-                sorted_order = [f[2] for f in sorted_order]
-                for e in sorted_order:
-                    control_elements.append(e)
-
-        elif len(fires_order) > 0:
-            if len(fires_order) <= self.capacity:
-                sorted_order = [f[2] for f in fires_order]
-            else:
-                sorted_order = sorted(fires_order, key=lambda x: (x[0], x[1]), reverse=True)[:self.capacity]
-                sorted_order = [s[2] for s in sorted_order]
-
-            for e in sorted_order:
-                control_elements.append(e)
-
-        else:
-            return control
-
-        for e in control_elements:
-            print(self.control_map_gmdp[e])
-            control[e] = self.control_map_gmdp[e]
-
-        return control, urban_control
+    # def control(self, simulation_object, branchmodel):
+    #     control = defaultdict(lambda: (0, 0))
+    #
+    #     fires_order = []
+    #     histories = {}
+    #     for parent in branchmodel.boundary:
+    #         score1 = parent[1]
+    #         score2, parent_history = self.get_score(parent, [], branchmodel)
+    #         fires_order.append((score1, score2, parent))
+    #         histories[parent] = parent_history
+    #
+    #     urban_order = []
+    #     for ub in self.urbanboundary:
+    #         score = 0
+    #         for parent in histories.keys():
+    #             if ub in histories[parent]:
+    #                 score += 1
+    #
+    #         if score > 0:
+    #             urban_order.append((score, ub))
+    #
+    #     control_elements = []
+    #     if len(urban_order) > 0:
+    #         if len(urban_order) <= self.capacity:
+    #             sorted_order = [ub[1] for ub in urban_order]
+    #         else:
+    #             sorted_order = sorted(urban_order, key=lambda x: x[0], reverse=True)[:self.capacity]
+    #             sorted_order = [e[1] for e in sorted_order]
+    #
+    #         for e in sorted_order:
+    #             control_elements.append(e)
+    #
+    #         extra_control = self.capacity - len(urban_order)
+    #         if extra_control > 0:
+    #             sorted_order = sorted(fires_order, key=lambda x: (x[0], x[1]), reverse=True)[:extra_control]
+    #             sorted_order = [f[2] for f in sorted_order]
+    #             for e in sorted_order:
+    #                 control_elements.append(e)
+    #
+    #     elif len(fires_order) > 0:
+    #         if len(fires_order) <= self.capacity:
+    #             sorted_order = [f[2] for f in fires_order]
+    #         else:
+    #             sorted_order = sorted(fires_order, key=lambda x: (x[0], x[1]), reverse=True)[:self.capacity]
+    #             sorted_order = [s[2] for s in sorted_order]
+    #
+    #         for e in sorted_order:
+    #             control_elements.append(e)
+    #
+    #     else:
+    #         return control
+    #
+    #     for e in control_elements:
+    #         control[e] = self.control_map_gmdp[e]
+    #
+    #     return control
 
 
 # class RHTfiresNeedsWork(Policy):
