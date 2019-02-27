@@ -71,6 +71,7 @@ class GW(object):
         self.generation_data[self.generations]['mean'] = mean
         self.generation_data[self.generations]['p_stop'] = p_stop
 
+        all_children = list(set(all_children))
         self.history.extend(all_children)
         self.current_parents = all_children
 
@@ -145,5 +146,5 @@ class StaticModel(object):
         self.boundary = boundary
         self.current_boundary = self.boundary
 
-    def next_boundary(self, policy):
-        self.current_boundary = [b for b in self.current_boundary if b not in policy.control_decisions]
+    def next_boundary(self, policy_control):
+        self.current_boundary = [b for b in self.current_boundary if b not in policy_control]
