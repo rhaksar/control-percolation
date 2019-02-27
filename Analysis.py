@@ -104,10 +104,10 @@ class BranchModel(object):
 
     def next_generation(self, policy):
 
-        for process in self.GWprocesses.values():
-            for parent in process.current_parents:
-                if parent not in self.lattice_children:
-                    self.lattice_children[parent] = self.children_function(parent)
+        # for process in self.GWprocesses.values():
+        #     for parent in process.current_parents:
+        #         if parent not in self.lattice_children:
+        #             self.lattice_children[parent] = self.children_function(parent)
 
         # policy.generate_map(self)
         for process in self.GWprocesses.values():

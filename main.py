@@ -140,15 +140,17 @@ if __name__ == '__main__':
 
     # define policy
     cap = 6
-    # pi = UBTfires(capacity=cap, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp)
-    # pi = DWTfires(capacity=cap, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp)
+    # pi = UBTfires(capacity=cap, alpha_set=alpha, beta_set=beta, control_map_gmdp=map_gmdp)
+    # pi = DWTfires(capacity=cap, alpha_set=alpha, beta_set=beta, control_map_gmdp=map_gmdp)
     # pi = BFTfires(capacity=cap, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp)
-    # pi = RHTfires(capacity=cap, horizon=3, control_map_percolation=map_percolation, control_map_gmdp=map_gmdp)
-    pi = UPTfires(capacity=cap, horizon=5, control_map_gmdp=map_gmdp, alpha_set=alpha, beta_set=beta)
+    pi = RHTfires(capacity=cap, horizon=3, alpha_set=alpha, beta_set=beta, control_map_gmdp=map_gmdp)
+
+    # urban preservation policy requires a different setup
+    # pi = UPTfires(capacity=cap, horizon=5, control_map_gmdp=map_gmdp, alpha_set=alpha, beta_set=beta)
 
     # create branching process model approximation
     bm = BranchModel(lattice_parameters=p_parameters, pgf=binomial_pgf)
-    um = StaticModel()
+    # sm = StaticModel()
 
     # benchmark(sim, bm, pi, num_generations=1, num_simulations=500)
 
@@ -159,10 +161,10 @@ if __name__ == '__main__':
         bm.reset()
     
         bm.set_boundary(fire_boundary(sim))
-        um.set_boundary(urban_boundary(sim))
+        # sm.set_boundary(urban_boundary(sim))
         # pi.urbanboundary = urban_boundary(sim)
         print('fire boundary size:', len(bm.boundary))
-        print('urban boundary size:', len(um.boundary))
+        # print('urban boundary size:', len(sm.boundary))
 
         print('sim iteration %d' % sim.iter)
         mean, p_stop = bm.prediction()
@@ -172,17 +174,24 @@ if __name__ == '__main__':
             return forest_children(sim, parent)
         bm.set_children_function(children_function)
 
-        for n in range(1):
-            pi.generate_map(bm, um)
+        for n in range(2):
+            for process in bm.GWprocesses.values():
+                for parent in process.current_parents:
+                    if parent not in bm.lattice_children:
+                        bm.lattice_children[parent] = bm.children_function(parent)
+
+            pi.generate_map(bm)
+            # pi.generate_map(bm, sm)
 
             bm.next_generation(pi)
             mean, p_stop = bm.prediction()
             print('generation {0:2d}: mean {1:6.2f} | stop {2:5.2f}%'.format(n+1, mean, 100*p_stop))
 
-            um.next_boundary(pi)
+            # sm.next_boundary(pi.control_decisions)
 
         # apply control and update simulator
-        control = pi.control(sim, bm, um)
+        control = pi.control(bm)
+        # control = pi.control(bm, sm)
         dense_state = sim.dense_state()
 
         sim.update(control)

@@ -6,11 +6,11 @@ from Utilities import *
 
 class Policy(object):
 
-    def __init__(self, capacity, control_map_gmdp, alpha_set, beta_set):
+    def __init__(self, capacity, alpha_set, beta_set, control_map_gmdp):
         self.capacity = capacity
-        self.control_map_gmdp = control_map_gmdp
         self.alpha_set = alpha_set
         self.beta_set = beta_set
+        self.control_map_gmdp = control_map_gmdp
 
         # self.map = None
         # self.urbanboundary = []
@@ -28,8 +28,8 @@ class UBTfires(Policy):
     Choose boundary nodes to apply action with uniform probability.
     """
 
-    def __init__(self, capacity, control_map_gmdp, alpha_set, beta_set):
-        Policy.__init__(self, capacity, control_map_gmdp, alpha_set, beta_set)
+    def __init__(self, capacity, alpha_set, beta_set, control_map_gmdp):
+        Policy.__init__(self, capacity, alpha_set, beta_set, control_map_gmdp)
         self.coefficient = None
 
     def map(self, parent, child):
@@ -74,13 +74,13 @@ class UBTfires(Policy):
 class DWTfires(Policy):
     """
     Degree Weighted Treatment.
-    Choose boundary nodes to apply action with probability proportional to their out-degree.
+    Choose boundary nodes to apply action with probability proportional to their number of healthy neighbors.
     """
 
-    def __init__(self, capacity, control_map_gmdp, alpha_set, beta_set):
-        Policy.__init__(self, capacity, control_map_gmdp, alpha_set, beta_set)
+    def __init__(self, capacity, alpha_set, beta_set, control_map_gmdp):
+        Policy.__init__(self, capacity, alpha_set, beta_set, control_map_gmdp)
 
-        self.data = None
+        self.data = dict()
 
     def map(self, parent, child):
         alpha = self.alpha_set[child]
@@ -90,15 +90,16 @@ class DWTfires(Policy):
         _, delta_beta = self.control_map_gmdp[parent]['on_fire']
 
         delta_p = percolation_parameter(alpha, beta) - percolation_parameter(alpha-delta_alpha, beta-delta_beta)
-        return self.data[parent]['c']*delta_p
+        return self.data[parent]*delta_p
 
     def generate_map(self, branchmodel):
         boundary_size = branchmodel.statistics[branchmodel.generations]['mean']
-        if boundary_size <= self.capacity:
-            self.map = lambda parent_child: self.control_map_percolation[parent_child]
 
+        if boundary_size == 0:
+            self.data = defaultdict(lambda: 0)
+        elif boundary_size <= self.capacity:
+            self.data = defaultdict(lambda: 1)
         else:
-            coefficient = {}
             total_out_degree = 0
             for process in branchmodel.GWprocesses.values():
                 for parent in process.current_parents:
@@ -106,16 +107,10 @@ class DWTfires(Policy):
                     children = [child for child in children if child != parent and child not in process.history]
 
                     total_out_degree += len(children)
-                    coefficient[parent] = len(children)
+                    self.data[parent] = len(children)
 
-            def compute_coefficient(di, sum_di):
-                if sum_di == 0:
-                    return 1
-                return np.amin([(di*self.capacity)/sum_di, 1])
-            coefficient = {parent: compute_coefficient(coefficient[parent], total_out_degree)
-                           for parent in coefficient.keys()}
-
-            self.map = lambda parent_child: coefficient[parent_child[0]]*self.control_map_percolation[parent_child]
+            self.data = {parent: np.amin([(self.data[parent]*self.capacity)/total_out_degree, 1])
+                         for parent in self.data.keys()}
 
     def control(self, branchmodel):
         control = defaultdict(lambda: (0, 0))
@@ -133,17 +128,15 @@ class DWTfires(Policy):
                 children = branchmodel.lattice_children[node]
                 children = [child for child in children if child != node]
                 total_out_degree += len(children)
-                # probabilities[i] = self.capacity*len(children)
                 probabilities[i] = len(children)
 
-            # probabilities = np.minimum(probabilities/total_out_degree, 1)
             probabilities /= np.sum(probabilities)
-
             idx = np.random.choice(boundary_size, size=self.capacity, replace=False, p=probabilities)
 
         for i in idx:
-            control[boundary[i]] = self.control_map_gmdp[boundary[i]]
+            control[boundary[i]] = self.control_map_gmdp[boundary[i]]['on_fire']
 
+        self.data = dict()
         return control
 
 
@@ -220,12 +213,11 @@ class RHTfires(Policy):
     Receding Horizon Treatment.
     """
 
-    def __init__(self, capacity, horizon, control_map_percolation, control_map_gmdp):
-        Policy.__init__(self, capacity, control_map_percolation, control_map_gmdp)
+    def __init__(self, capacity, horizon, alpha_set, beta_set, control_map_gmdp):
+        Policy.__init__(self, capacity, alpha_set, beta_set, control_map_gmdp)
         self.horizon = horizon
-        self.rollout_policy = UBTfires(capacity=self.capacity,
-                                       control_map_percolation=self.control_map_percolation,
-                                       control_map_gmdp=self.control_map_gmdp)
+        self.control_decisions = []
+        # self.rollout_policy = UBTfires(self.capacity, alpha_set, beta_set, self.control_map_gmdp)
 
     def get_score(self, p, hist, branchmodel, counter=1):
         if p not in branchmodel.lattice_children:
@@ -245,13 +237,21 @@ class RHTfires(Policy):
             return np.sum(ss)
 
     def map(self, parent, child):
-        pass
+        alpha = self.alpha_set[child]
+        beta = self.beta_set[parent]
+
+        delta_alpha, delta_beta = 0, 0
+        if parent in self.control_decisions:
+            _, delta_beta = self.control_map_gmdp[parent]['on_fire']
+        if child in self.control_decisions:
+            delta_alpha, _ = self.control_map_gmdp[child]['healthy']
+
+        return percolation_parameter(alpha, beta) - percolation_parameter(alpha-delta_alpha, beta-delta_beta)
 
     def generate_map(self, branchmodel):
         boundary_size = branchmodel.statistics[branchmodel.generations]['mean']
-        if boundary_size <= self.capacity:
-            self.map = lambda parent_child: self.control_map_percolation[parent_child]
-
+        if boundary_size == 0:
+            return
         else:
             coefficient = defaultdict(lambda: 0)
 
@@ -264,33 +264,16 @@ class RHTfires(Policy):
             elements = sorted(elements, key=lambda x: x[0], reverse=True)[:self.capacity]
             elements = [e[1] for e in elements]
             for e in elements:
-                coefficient[e] = 1
+                self.control_decisions.append(e)
 
-            self.map = lambda parent_child: coefficient[parent_child[0]]*self.control_map_percolation[parent_child]
-
-    def control(self, simulation_object, branchmodel):
+    def control(self, branchmodel):
         control = defaultdict(lambda: (0, 0))
-        boundary = branchmodel.boundary
-        boundary_size = len(boundary)
 
-        if boundary_size == 0:
-            return control
+        for fire in branchmodel.boundary:
+            if fire in self.control_decisions:
+                control[fire] = self.control_map_gmdp[fire]['on_fire']
 
-        elif boundary_size <= self.capacity:
-            idx = range(boundary_size)
-
-        else:
-            idx = []
-            for i, node in enumerate(boundary):
-                score = self.get_score(node, [], branchmodel)
-                idx.append((score, i))
-
-            idx = sorted(idx, key=lambda x: x[0], reverse=True)[:self.capacity]
-            idx = [e[1] for e in idx]
-
-        for i in idx:
-            control[boundary[i]] = self.control_map_gmdp[boundary[i]]
-
+        self.control_decisions = []
         return control
 
 
@@ -300,8 +283,8 @@ class UPTfires(Policy):
     Treat fires and remove urban areas to preserve an urban region.
     """
 
-    def __init__(self, horizon, capacity, control_map_gmdp, alpha_set, beta_set):
-        Policy.__init__(self, capacity, None, control_map_gmdp)
+    def __init__(self, horizon, capacity, alpha_set, beta_set, control_map_gmdp):
+        Policy.__init__(self, capacity, alpha_set, beta_set, control_map_gmdp)
         self.horizon = horizon
 
         self.control_decisions = []
