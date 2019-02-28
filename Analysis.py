@@ -16,15 +16,24 @@ def multiply_probabilities(values):
 
 def binomial_pgf(gw):
 
-    if gw.generations == 1:
-        p_stop_previous = 0
-    else:
-        p_stop_previous = gw.generation_data[gw.generations-1]['p_stop']
+    # if gw.generations == 1:
+    #     p_stop_previous = 0
+    # else:
+    #     p_stop_previous = gw.generation_data[gw.generations-1]['p_stop']
+    #
+    # p_stop = np.power(1 + (p_stop_previous-1)*p_children, branch_factor)
+
+    p_stop = 0
+    for n in reversed(range(1, gw.generations+1)):
+        p_children = gw.generation_data[n]['p_children']
+        branch_factor = gw.generation_data[n]['branch_factor']
+
+        p_stop = np.power(1 + (p_stop-1)*p_children, branch_factor)
 
     p_children = gw.generation_data[gw.generations]['p_children']
     branch_factor = gw.generation_data[gw.generations]['branch_factor']
 
-    return p_children*branch_factor, np.power(1 + (p_stop_previous-1)*p_children, branch_factor)
+    return p_children*branch_factor, p_stop
 
 
 class GW(object):
