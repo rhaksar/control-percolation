@@ -46,7 +46,8 @@ def uniform():
 
 def nonuniform(simulation):
     alpha_set = dict()
-    beta_set = defaultdict(lambda: np.exp(-1/9))
+    # beta_set = defaultdict(lambda: np.exp(-1/9))
+    beta_set = dict()
     p_set = dict()
 
     delta_beta = 0.35
@@ -59,6 +60,15 @@ def nonuniform(simulation):
             alpha_set[(r, c)] = alpha_start + (c/(simulation.dims[1]-1))*(alpha_end-alpha_start)
 
             control_gmdp[(r, c)] = {'healthy': (alpha_set[(r, c)], 0), 'on_fire': (0, delta_beta)}
+
+    beta1 = np.exp(-1/5)
+    beta2 = np.exp(-1/10)
+    for r in range(dimension):
+        for c in range(dimension):
+            if c < dimension-simulation.urban_width:
+                beta_set[(r, c)] = beta1
+            else:
+                beta_set[(r, c)] = beta2
 
     # control_p = dict()
     for tree_rc in simulation.group.keys():
