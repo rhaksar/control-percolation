@@ -31,6 +31,7 @@ class UBTfires(Policy):
     def __init__(self, capacity, alpha_set, beta_set, control_map_gmdp):
         Policy.__init__(self, capacity, alpha_set, beta_set, control_map_gmdp)
         self.coefficient = None
+        self.name = 'UBT'
 
     def map(self, parent, child):
         if self.coefficient == 0:
@@ -81,6 +82,7 @@ class DWTfires(Policy):
         Policy.__init__(self, capacity, alpha_set, beta_set, control_map_gmdp)
 
         self.data = dict()
+        self.name = 'DWT'
 
     def map(self, parent, child):
         alpha = self.alpha_set[child]
@@ -217,7 +219,7 @@ class RHTfires(Policy):
         Policy.__init__(self, capacity, alpha_set, beta_set, control_map_gmdp)
         self.horizon = horizon
         self.control_decisions = []
-        # self.rollout_policy = UBTfires(self.capacity, alpha_set, beta_set, self.control_map_gmdp)
+        self.name = 'RHT' + str(self.horizon)
 
     def get_score(self, p, hist, branchmodel, counter=1):
         if p not in branchmodel.lattice_children:
@@ -253,8 +255,6 @@ class RHTfires(Policy):
         if boundary_size == 0:
             return
         else:
-            coefficient = defaultdict(lambda: 0)
-
             elements = []
             for process in branchmodel.GWprocesses.values():
                 for parent in process.current_parents:
@@ -277,7 +277,7 @@ class RHTfires(Policy):
         return control
 
 
-class UPTfires(Policy):
+class USTfires(Policy):
     """
     Urban Preservation Treatment.
     Treat fires and remove urban areas to preserve an urban region.
@@ -286,10 +286,8 @@ class UPTfires(Policy):
     def __init__(self, horizon, capacity, alpha_set, beta_set, control_map_gmdp):
         Policy.__init__(self, capacity, alpha_set, beta_set, control_map_gmdp)
         self.horizon = horizon
-
         self.control_decisions = []
-        self.alpha_set = alpha_set
-        self.beta_set = beta_set
+        self.name = 'UST' + str(self.horizon)
 
     def get_score(self, p, hist, branchmodel, counter=1):
         if p not in branchmodel.lattice_children:
