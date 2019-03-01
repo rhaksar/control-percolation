@@ -62,15 +62,35 @@ def nonuniform(simulation):
 
     beta1 = np.exp(-1/5)
     beta2 = np.exp(-1/10)
-    for r in range(dimension):
-        for c in range(dimension):
-            if c < dimension-simulation.urban_width:
+    for r in range(simulation.dims[0]):
+        for c in range(simulation.dims[1]):
+            if c < simulation.dims[1]-simulation.urban_width:
                 beta_set[(r, c)] = beta1
             else:
                 beta_set[(r, c)] = beta2
 
             control_gmdp[(r, c)] = {'healthy': (alpha_set[(r, c)], 0),
                                     'on_fire': (0, np.amin([delta_beta, beta_set[(r, c)]]))}
+
+    # set initial condition
+    initial_fire = []
+    r_center = np.floor((simulation.dims[0]-1)/2).astype(np.uint8)
+    c_center = np.floor((simulation.dims[1]-1)/2).astype(np.uint8)
+
+    delta_r = [k for k in range(-2, 3)]
+    delta_c = [k for k in range(-2, 3)]
+    deltas = itertools.product(delta_r, delta_c)
+
+    for (dr, dc) in deltas:
+        if dr == 0 and dc == 0:
+            continue
+        elif (dr == -2 or dr == 2) and (dc == -2 or dc == 2):
+            continue
+        elif dc == dr or dc == -dr:
+            continue
+
+        r, c = r_center + dr, c_center + dc
+        initial_fire.append((r, c))
 
     # control_p = dict()
     for tree_rc in simulation.group.keys():
@@ -91,7 +111,7 @@ def nonuniform(simulation):
             #
             #     control_p[(tree_rc, neighbor)][k] = dp
 
-    return alpha_set, beta_set, control_gmdp, p_set
+    return alpha_set, beta_set, initial_fire, control_gmdp, p_set
 
 
 def benchmark(simulation, branchmodel, policy, num_generations=1, num_simulations=1):
@@ -158,7 +178,7 @@ def benchmark(simulation, branchmodel, policy, num_generations=1, num_simulation
     print('finished at {0:s}'.format(time.strftime('%d-%b-%Y %H:%M')))
     print('{0:0.2f}s = {1:0.2f}m = {2:0.2f}h elapsed'.format(dt, dt/60, dt/3600))
 
-    filename = policy.name + '_C' + str(policy.capacity) + '_s' + str(num_simulations) + '.pkl'
+    filename = policy.name + '_s' + str(num_simulations) + '.pkl'
     output = open('results/' + filename, 'wb')
     pickle.dump(results, output)
     output.close()
@@ -182,30 +202,10 @@ if __name__ == '__main__':
     dimension = 50
     urban_width = 10
 
-    # set initial condition
-    initial_fire = []
-    r_center = np.floor((dimension - 1) / 2).astype(np.uint8)
-    c_center = np.floor((dimension - 1) / 2).astype(np.uint8)
-
-    delta_r = [k for k in range(-2, 3)]
-    delta_c = [k for k in range(-2, 3)]
-    deltas = itertools.product(delta_r, delta_c)
-
-    for (dr, dc) in deltas:
-        if dr == 0 and dc == 0:
-            continue
-        elif (dr == -2 or dr == 2) and (dc == -2 or dc == 2):
-            continue
-        elif dc == dr or dc == -dr:
-            continue
-
-        r, c = r_center + dr, c_center + dc
-        initial_fire.append((r, c))
-
     # generate information for uniform or non-uniform case
     # alpha, beta, lattice_parameters, control_percolation, control_gmdp = uniform(LatticeForest(dimension))
     # alpha, beta, p_parameters, map_percolation, map_gmdp = nonuniform(LatticeForest(dimension))
-    alpha, beta, map_gmdp, p_parameters = nonuniform(UrbanForest(dimension, urban_width))
+    alpha, beta, initial_fire, map_gmdp, p_parameters = nonuniform(UrbanForest(dimension, urban_width))
 
     # sim = LatticeForest(dimension, alpha=alpha, beta=beta)
     sim = UrbanForest(dimension, urban_width, initial_fire=initial_fire, alpha=alpha, beta=beta)
@@ -222,7 +222,7 @@ if __name__ == '__main__':
     bm = BranchModel(lattice_parameters=p_parameters, pgf=binomial_pgf)
     sm = StaticModel()
 
-    benchmark(sim, bm, pi, num_generations=1, num_simulations=10)
+    benchmark(sim, bm, pi, num_generations=1, num_simulations=1000)
 
     # np.random.seed(4)
     # # for _ in range(45):  # 50
