@@ -22,6 +22,26 @@ class Policy(object):
     #     raise NotImplementedError
 
 
+class NCTfires(Policy):
+    """
+    No Control Treatment.
+    Do nothing.
+    """
+
+    def __init__(self, capacity, alpha_set, beta_set, control_map_gmdp):
+        Policy.__init__(self, capacity, alpha_set, beta_set, control_map_gmdp)
+        self.name = 'NCT'
+
+    def map(self, parent, child):
+        return 0
+
+    def generate_map(self, branchmodel):
+        pass
+
+    def control(self, branchmodel):
+        return defaultdict(lambda: (0, 0))
+
+
 class UBTfires(Policy):
     """
     Uniform Boundary Treatment.
