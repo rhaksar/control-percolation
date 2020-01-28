@@ -6,13 +6,12 @@ import pickle
 import sys
 import time
 import warnings
-sys.path.insert(0, os.getcwd() + '/simulators')
+sys.path.insert(0, os.path.dirname(os.getcwd()) + '/simulators')
 
-from Analysis import *
-from fires.LatticeForest import LatticeForest
+from Analysis import binomial_pgf, BranchModel, StaticModel
 from fires.UrbanForest import UrbanForest
-from Policies import *
-from Utilities import *
+from Policies import NCTfires, UBTfires, DWTfires, RHTfires, USTfires
+from Utilities import fire_boundary, urban_boundary, forest_children, percolation_parameter, equivalent_percolation_control
 
 np.seterr(all='raise')
 
@@ -23,7 +22,7 @@ def uniform():
     b = np.exp(-1/10)
     p = percolation_parameter(a, b)
     if p <= 0.5:
-        raise Warning('Percolation paramter {0:0.2f} is not supercritical'.format(p))
+        raise Warning('Percolation parameter {0:0.2f} is not supercritical'.format(p))
     lattice_p = defaultdict(lambda: p)
 
     # given (delta_alpha, delta_beta), construct the equivalent delta_p
@@ -224,74 +223,4 @@ if __name__ == '__main__':
 
     benchmark(sim, bm, pi, num_generations=1, num_simulations=1000)
 
-    # np.random.seed(4)
-    # # for _ in range(45):  # 50
-    # while not sim.early_end:
-    #
-    #     bm.reset()
-    #
-    #     bm.set_boundary(fire_boundary(sim))
-    #     print('fire boundary size:', len(bm.boundary))
-    #
-    #     if isinstance(pi, USTfires):
-    #         sm.set_boundary(urban_boundary(sim))
-    #         pi.urbanboundary = urban_boundary(sim)
-    #         print('urban boundary size:', len(sm.boundary))
-    #
-    #     print('sim iteration %d' % sim.iter)
-    #     mean, p_stop = bm.prediction()
-    #     print('generation {0:2d}: size {1:6.2f}'.format(0, mean))
-    #
-    #     def children_function(parent):
-    #         return forest_children(sim, parent)
-    #     bm.set_children_function(children_function)
-    #
-    #     for n in range(1):
-    #         for process in bm.GWprocesses.values():
-    #             for parent in process.current_parents:
-    #                 if parent not in bm.lattice_children:
-    #                     bm.lattice_children[parent] = bm.children_function(parent)
-    #
-    #         if not isinstance(pi, USTfires):
-    #             pi.generate_map(bm)
-    #         else:
-    #             pi.generate_map(bm, sm)
-    #
-    #         bm.next_generation(pi)
-    #         mean, p_stop = bm.prediction()
-    #         print('generation {0:2d}: mean {1:6.2f} | stop {2:5.2f}%'.format(n+1, mean, 100*p_stop))
-    #
-    #         if isinstance(pi, USTfires):
-    #             sm.next_boundary(pi.control_decisions)
-    #
-    #     # apply control and update simulator
-    #     if not isinstance(pi, USTfires):
-    #         control = pi.control(bm)
-    #     else:
-    #         control = pi.control(bm, sm)
-    #     dense_state = sim.dense_state()
-    #
-    #     sim.update(control)
-    #
-    #     dense_state = sim.dense_state()
-    #     print()
-
-    # print('remaining trees: {0:0.2f}%'.format(100*sim.stats[0]/np.sum(sim.stats)))
-    #
-    # ub_states = []
-    # for ub in sim.urban:
-    #     ub_states.append(sim.group[ub].state)
-    #
-    # print('removed urban areas:', [True if ub == 3 else False for ub in ub_states].count(True))
-    # print('remaining urban areas:', [True if ub == 0 else False for ub in ub_states].count(True))
-
-    # dense_state = sim.dense_state()
-    # print(sim.stats_trees)
-    # print(sim.stats_urban)
-    # print(len(sim.fires))
-    #
-    # print('percent healthy trees: {0:0.2f}%'.format(100*sim.stats_trees[0]/np.sum(sim.stats_trees)))
-    # print('percent healthy urban developments: {0:0.2f}%'.format(100*sim.stats_urban[0]/np.sum(sim.stats_urban)))
-    # print('percent razed urban developments: {0:0.2f}%'.format(100*sim.stats_urban[3]/np.sum(sim.stats_urban)))
-    #
     print()

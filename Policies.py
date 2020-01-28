@@ -1,7 +1,7 @@
 from collections import defaultdict
 import numpy as np
 
-from Utilities import *
+from Utilities import percolation_parameter
 
 
 class Policy(object):

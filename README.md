@@ -1,9 +1,9 @@
 # control-percolation
 
 ### Requirements  
-- Developed with Python 3.5
+- Developed with Python 3.6
 - Requires the `numpy` package
-- Requires the [simulators](https://github.com/rhaksar/simulators) repository: clone the repository into the root level of this repository 
+- Requires the [simulators](https://github.com/rhaksar/simulators) repository
 
 ### Files
 - `Analysis.py`: Approximates percolation on a lattice using a set of Galton-Watson branching processes. Provides estimates of the rate of growth and stopping time of percolation. 
