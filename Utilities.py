@@ -6,6 +6,12 @@ from fires.ForestElements import Tree
     
 
 def fire_boundary(forest_sim):
+    """
+    Generate the fire boundary for the current time step of the simulation.
+
+    :param forest_sim: simulation object for the lattice-based forest fire simulator.
+    :return: a list of (row, column) tuples which are the lattice locations for each boundary element.
+    """
     boundary = []
 
     for fire in forest_sim.fires:
@@ -19,6 +25,12 @@ def fire_boundary(forest_sim):
 
 
 def urban_boundary(forest_sim):
+    """
+    Generate the urban boundary for the current time step of the simulation.
+
+    :param forest_sim: simulation object for the lattice-based urban forest fire simulator.
+    :return: a list of (row, column) tuples which are the lattice locations for each boundary element.
+    """
     boundary = []
 
     for urban in forest_sim.urban:
@@ -41,6 +53,13 @@ def urban_boundary(forest_sim):
 
 
 def forest_children(forest_sim, i):
+    """
+    Generate the children for each boundary element.
+
+    :param forest_sim: simulator object for the lattice-based forest fire simulator.
+    :param i: a boundary element which is the parent of the generated children.
+    :return: a list of (row, column) tuples which are the lattice locations for each child.
+    """
     neighbors = forest_sim.group[i].neighbors
     children = [j for j in neighbors if forest_sim.group[j].is_healthy(forest_sim.group[j].state)]
 

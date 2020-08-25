@@ -5,6 +5,9 @@ from Utilities import percolation_parameter
 
 
 class Policy(object):
+    """
+    Policy template class.
+    """
 
     def __init__(self, capacity, alpha_set, beta_set, control_map_gmdp):
         self.capacity = capacity
@@ -160,74 +163,6 @@ class DWTfires(Policy):
 
         self.data = dict()
         return control
-
-
-# class BFTfires(Policy):
-#     """
-#     Best First Treatment.
-#     Deterministic policy that chooses the most dangerous fires to treat.
-#     """
-#
-#     def __init__(self, capacity, control_map_percolation, control_map_gmdp):
-#         Policy.__init__(self, capacity, control_map_percolation, control_map_gmdp)
-#
-#     def generate_map(self, branchmodel):
-#         boundary_size = branchmodel.statistics[branchmodel.generations]['mean']
-#         if boundary_size <= self.capacity:
-#             self.map = lambda parent_child: self.control_map_percolation[parent_child]
-#
-#         else:
-#             coefficient = defaultdict(lambda: 0)
-#
-#             elements = []
-#             for process in branchmodel.GWprocesses.values():
-#                 for parent in process.current_parents:
-#                     # score = len(branchmodel.lattice_children[parent])
-#
-#                     children = branchmodel.lattice_children[parent]
-#                     children = [child for child in children if child != parent and child not in process.history]
-#                     children_parameters = [branchmodel.lattice_parameters[(parent, child)] for child in children]
-#                     score = 0 if not children_parameters else len(children)*np.mean(children_parameters)
-#
-#                     elements.append((score, parent))
-#
-#             elements = sorted(elements, key=lambda x: x[0], reverse=True)[:self.capacity]
-#             elements = [e[1] for e in elements]
-#             for e in elements:
-#                 coefficient[e] = 1
-#
-#             self.map = lambda parent_child: coefficient[parent_child[0]]*self.control_map_percolation[parent_child]
-#
-#     def control(self, simulation_object, branchmodel):
-#         control = defaultdict(lambda: (0, 0))
-#         boundary = branchmodel.boundary
-#         boundary_size = len(boundary)
-#
-#         if boundary_size == 0:
-#             return control
-#
-#         elif boundary_size <= self.capacity:
-#             idx = range(boundary_size)
-#
-#         else:
-#             idx = []
-#             for i, node in enumerate(boundary):
-#                 # score = len(branchmodel.lattice_children[node])
-#
-#                 children = branchmodel.lattice_children[node]
-#                 children = [child for child in children if child != node]
-#                 score = np.mean([branchmodel.lattice_parameters[(node, child)] for child in children])
-#                 score *= len(children)
-#
-#                 idx.append((score, i))
-#
-#             idx = sorted(idx, key=lambda x: x[0], reverse=True)[:self.capacity]
-#             idx = [e[1] for e in idx]
-#
-#         for i in idx:
-#             control[boundary[i]] = self.control_map_gmdp[boundary[i]]
-#
-#         return control
 
 
 class RHTfires(Policy):
