@@ -1,6 +1,6 @@
 # control-percolation
 
-A repository to support the paper [Controlling Heterogeneous Stochastic Growth Processes on Lattices with Limited Resources](https://msl.stanford.edu/sites/g/files/sbiybj8446/f/cdc2019_0.pdf).
+A repository to support the paper **Controlling Heterogeneous Stochastic Growth Processes on Lattices with Limited Resources**.
 
 Paper citation:
 ```
