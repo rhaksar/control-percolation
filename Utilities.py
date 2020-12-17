@@ -1,8 +1,4 @@
-import os
-import sys
-sys.path.insert(0, os.getcwd() + '/simulators')
-
-from fires.ForestElements import Tree
+from simulators.fires.ForestElements import Tree
     
 
 def fire_boundary(forest_sim):

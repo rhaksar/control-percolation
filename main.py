@@ -1,15 +1,12 @@
 from collections import defaultdict
 import itertools
 import numpy as np
-import os
 import pickle
-import sys
 import time
 import warnings
-sys.path.insert(0, os.path.dirname(os.getcwd()) + '/simulators')
 
 from Analysis import binomial_pgf, BranchModel, StaticModel
-from fires.UrbanForest import UrbanForest
+from simulators.fires.UrbanForest import UrbanForest
 from Policies import NCTfires, UBTfires, DWTfires, RHTfires, USTfires
 from Utilities import fire_boundary, urban_boundary, forest_children, percolation_parameter, equivalent_percolation_control
 
@@ -211,7 +208,7 @@ if __name__ == '__main__':
 
     # define policy
     cap = 6
-    # pi = NCTfires(capacity=cap, alpha_set=alpha, beta_set=beta, control_map_gmdp=map_gmdp)
+    pi = NCTfires(capacity=cap, alpha_set=alpha, beta_set=beta, control_map_gmdp=map_gmdp)
     # pi = UBTfires(capacity=cap, alpha_set=alpha, beta_set=beta, control_map_gmdp=map_gmdp)
     # pi = DWTfires(capacity=cap, alpha_set=alpha, beta_set=beta, control_map_gmdp=map_gmdp)
     # pi = RHTfires(capacity=cap, horizon=1, alpha_set=alpha, beta_set=beta, control_map_gmdp=map_gmdp)
